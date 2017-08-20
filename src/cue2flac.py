@@ -1,13 +1,17 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 import argparse
 import os
 import re
 import subprocess
+import sys
 
 
 class Cue2Flac(object):
+
+    CUE2FLAC_DESCRIPTION = "cue2flac - Split a FLAC image into tracks according to a .cue file."
+
     def __init__(self):
-        self.parser = argparse.ArgumentParser()
+        self.parser = argparse.ArgumentParser(description=Cue2Flac.CUE2FLAC_DESCRIPTION)
         self.parser.add_argument(
             "path_to_cue",
             help="path to the cue file describing the desired split")
@@ -16,10 +20,21 @@ class Cue2Flac(object):
             nargs="?",
             help="path to the output directory where resulting files will be saved"
                  + " (default is the same directory where the cue file is stored)")
+        self.parser.add_argument(
+            "-q", "--quiet",
+            action="store_true",
+            help="don't print the output or errors from ffmpeg (\033[1mimplies -f\033[0m)")
+        self.parser.add_argument(
+            "-f", "--force",
+            action="store_true",
+            help="force overwriting the output files"
+                 + " (in case you run the script on the same cue file multiple times)")
 
         args = self.parser.parse_args()
         self.cuepath = args.path_to_cue
         self.outputpath = None if not args.output_dir else args.output_dir
+        self.quiet = args.quiet
+        self.force = args.force
 
     def split(self):
         if not os.path.exists(self.cuepath):
@@ -92,7 +107,11 @@ class Cue2Flac(object):
                         + '.flac'
             trackname = re.sub('[<>:"\\/|?*]', ' ', trackname)
 
-            cmd = 'ffmpeg'
+            cmd = ''
+            if self.quiet or self.force:
+                cmd += 'yes | '
+
+            cmd += 'ffmpeg'
             cmd += ' -i "' + str(currentfile) + '"'
             cmd += ' -ss ' + str(int(track['start'] / 60 / 60)).zfill(2) \
                      + ':' + str(int(track['start'] / 60) % 60).zfill(2) \
@@ -109,10 +128,17 @@ class Cue2Flac(object):
             cmd += ' "' + outputdir + trackname + '"'
 
             try:
-                subprocess.run(cmd, shell=True, check=True)
+                subprocess.run(cmd,
+                               shell=True,
+                               check=True,
+                               stdout=subprocess.DEVNULL if self.quiet else None,
+                               stderr=subprocess.DEVNULL if self.quiet else None)
             except subprocess.CalledProcessError:
                 break
 
-if __name__ == """__main__""":
+def main():
     c2f = Cue2Flac()
     c2f.split()
+
+if __name__ == """__main__""":
+    main()
