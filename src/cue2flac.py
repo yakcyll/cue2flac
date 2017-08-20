@@ -2,6 +2,7 @@
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -39,6 +40,8 @@ class Cue2Flac(object):
     def split(self):
         if not os.path.exists(self.cuepath):
             raise IOError("Specified .cue file doesn't exist!")
+        if not shutil.which('ffmpeg'):
+            raise RuntimeError("ffmpeg has not been found in $PATH!")
 
         cue = ''
         with open(self.cuepath) as cuefile:
@@ -137,6 +140,10 @@ class Cue2Flac(object):
                 break
 
 def main():
+    if sys.version_info[0] != 3 or sys.version_info[1] < 3:
+        print("This tool requires Python version 3.3 or later.")
+        sys.exit(1)
+
     c2f = Cue2Flac()
     c2f.split()
 
