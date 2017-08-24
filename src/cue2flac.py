@@ -60,6 +60,7 @@ class Cue2Flac(object):
 
         commonmeta = {}
         tracks = []
+        files = {}
         currentfile = None
 
         for line in cue:
@@ -73,6 +74,8 @@ class Cue2Flac(object):
                 commonmeta['album'] = ' '.join(line.strip().split(' ')[1:]).replace('"', '')
             elif line.startswith('FILE '):
                 currentfile = inputdir + ' '.join(line.strip().split(' ')[1:-1]).replace('"', '')
+                tracks = []
+                files[currentfile] = tracks
 
             elif line.startswith('  TRACK '):
                 track = commonmeta.copy()
@@ -88,56 +91,59 @@ class Cue2Flac(object):
                 t = list(map(int, ' '.join(line.strip().split(' ')[2:]).replace('"', '').split(':')))
                 tracks[-1]['start'] = 60 * t[0] + t[1] + t[2] / 100.0
 
-        for i in range(len(tracks) - 1):
-            tracks[i]['duration'] = tracks[i + 1]['start'] - tracks[i]['start']
+        trackcount = sum([len(tracks) for flacs, tracks in files.items()])
 
-        for track in tracks:
-            metadata = {
-                'artist': track['artist'],
-                'title': track['title'],
-                'album': track['album'],
-                'track': str(track['track']) + '/' + str(len(tracks))
-            }
+        for flacname, tracks in files.items():
+            for i in range(len(tracks) - 1):
+                tracks[i]['duration'] = tracks[i + 1]['start'] - tracks[i]['start']
 
-            if 'genre' in track:
-                metadata['genre'] = track['genre']
-            if 'date' in track:
-                metadata['date'] = track['date']
+            for track in tracks:
+                metadata = {
+                    'artist': track['artist'],
+                    'title': track['title'],
+                    'album': track['album'],
+                    'track': str(track['track']) + '/' + str(trackcount)
+                }
 
-            trackname = str(track['track']).zfill(2) \
-                        + '. ' + str(track['artist']) \
-                        + ' - ' + str(track['title']) \
-                        + '.flac'
-            trackname = re.sub('[<>:"\\/|?*]', ' ', trackname)
+                if 'genre' in track:
+                    metadata['genre'] = track['genre']
+                if 'date' in track:
+                    metadata['date'] = track['date']
 
-            cmd = ''
-            if self.quiet or self.force:
-                cmd += 'yes | '
+                trackname = str(track['track']).zfill(2) \
+                            + '. ' + str(track['artist']) \
+                            + ' - ' + str(track['title']) \
+                            + '.flac'
+                trackname = re.sub('[<>:"\\/|?*]', ' ', trackname)
 
-            cmd += 'ffmpeg'
-            cmd += ' -i "' + str(currentfile) + '"'
-            cmd += ' -ss ' + str(int(track['start'] / 60 / 60)).zfill(2) \
-                     + ':' + str(int(track['start'] / 60) % 60).zfill(2) \
-                     + ':' + str(int(track['start'] % 60)).zfill(2)
+                cmd = ''
+                if self.quiet or self.force:
+                    cmd += 'yes | '
 
-            if 'duration' in track:
-                cmd += ' -t ' + str(int(track['duration'] / 60 / 60)).zfill(2) \
-                        + ':' + str(int(track['duration'] / 60) % 60).zfill(2) \
-                        + ':' + str(int(track['duration'] % 60)).zfill(2)
+                cmd += 'ffmpeg'
+                cmd += ' -i "' + str(flacname) + '"'
+                cmd += ' -ss ' + str(int(track['start'] / 60 / 60)).zfill(2) \
+                         + ':' + str(int(track['start'] / 60) % 60).zfill(2) \
+                         + ':' + str(int(track['start'] % 60)).zfill(2)
 
-            cmd += ' ' + ' '.join('-metadata ' + str(k) + '="' + str(v) + '"'
-                                  for (k, v) in metadata.items())
-            cmd += ' -acodec copy'
-            cmd += ' "' + outputdir + trackname + '"'
+                if 'duration' in track:
+                    cmd += ' -t ' + str(int(track['duration'] / 60 / 60)).zfill(2) \
+                            + ':' + str(int(track['duration'] / 60) % 60).zfill(2) \
+                            + ':' + str(int(track['duration'] % 60)).zfill(2)
 
-            try:
-                subprocess.run(cmd,
-                               shell=True,
-                               check=True,
-                               stdout=subprocess.DEVNULL if self.quiet else None,
-                               stderr=subprocess.DEVNULL if self.quiet else None)
-            except subprocess.CalledProcessError:
-                break
+                cmd += ' ' + ' '.join('-metadata ' + str(k) + '="' + str(v) + '"'
+                                      for (k, v) in metadata.items())
+                cmd += ' -acodec copy'
+                cmd += ' "' + outputdir + trackname + '"'
+
+                try:
+                    subprocess.run(cmd,
+                                   shell=True,
+                                   check=True,
+                                   stdout=subprocess.DEVNULL if self.quiet else None,
+                                   stderr=subprocess.DEVNULL if self.quiet else None)
+                except subprocess.CalledProcessError:
+                    break
 
 def main():
     if sys.version_info[0] != 3 or sys.version_info[1] < 3:
