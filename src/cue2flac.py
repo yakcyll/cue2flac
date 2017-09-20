@@ -22,6 +22,11 @@ class Cue2Flac(object):
             help="path to the output directory where resulting files will be saved"
                  + " (default is the same directory where the cue file is stored)")
         self.parser.add_argument(
+            "-r", "--reencode",
+            action="store_true",
+            help="reencode the files instead of copying the stream directly"
+                 + " (retains original encoding settings, fixes durations of tracks)")
+        self.parser.add_argument(
             "-q", "--quiet",
             action="store_true",
             help="don't print the output or errors from ffmpeg (\033[1mimplies -f\033[0m)")
@@ -34,6 +39,7 @@ class Cue2Flac(object):
         args = self.parser.parse_args()
         self.cuepath = args.path_to_cue
         self.outputpath = None if not args.output_dir else args.output_dir
+        self.reencode = args.reencode
         self.quiet = args.quiet
         self.force = args.force
 
@@ -65,9 +71,9 @@ class Cue2Flac(object):
 
         for line in cue:
             if line.startswith('REM GENRE '):
-                commonmeta['genre'] = ' '.join(line.strip().split(' ')[2:]).strip()
+                commonmeta['genre'] = ' '.join(line.strip().split(' ')[2:]).strip().replace('"', '')
             elif line.startswith('REM DATE '):
-                commonmeta['date'] = ' '.join(line.strip().split(' ')[2:]).strip()
+                commonmeta['date'] = ' '.join(line.strip().split(' ')[2:]).strip().replace('"', '')
             elif line.startswith('PERFORMER '):
                 commonmeta['artist'] = ' '.join(line.strip().split(' ')[1:]).replace('"', '')
             elif line.startswith('TITLE '):
@@ -117,8 +123,6 @@ class Cue2Flac(object):
                 trackname = re.sub('[<>:"\\/|?*]', ' ', trackname)
 
                 cmd = ''
-                if self.quiet or self.force:
-                    cmd += 'yes | '
 
                 cmd += 'ffmpeg'
                 cmd += ' -i "' + str(flacname) + '"'
@@ -131,9 +135,15 @@ class Cue2Flac(object):
                             + ':' + str(int(track['duration'] / 60) % 60).zfill(2) \
                             + ':' + str(int(track['duration'] % 60)).zfill(2)
 
+                if self.quiet or self.force:
+                    cmd += ' -y'
+
+                if not self.reencode:
+                    cmd += ' -acodec copy'
+
                 cmd += ' ' + ' '.join('-metadata ' + str(k) + '="' + str(v) + '"'
                                       for (k, v) in metadata.items())
-                cmd += ' -acodec copy'
+
                 cmd += ' "' + outputdir + trackname + '"'
 
                 try:
